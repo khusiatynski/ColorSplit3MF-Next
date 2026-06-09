@@ -3,25 +3,36 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "colorsplit"
-version = "0.1.0"
-description = "3MF Mesh Color-Based Splitting Tool with Paint Color Support"
+name = "colorsplit3mf-next"
+version = "0.2.0"
+description = "No AMS 3MF color/material splitter for separate STL exports"
 authors = [
-    {name = "Andras Mocsary", email = "your.email@example.com"}
+    {name = "Andras Mocsary"},
+    {name = "ColorSplit3MF-Next contributors"}
 ]
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+legacy = [
     "trimesh>=3.9.0",
     "numpy>=1.19.0",
-    "scipy>=1.5.0",
-    "matplotlib>=3.3.0",
-    "scikit-learn>=1.0.0",
-    "open3d>=0.16.0",
-    "lib3mf>=1.8.0",
-    "networkx>=3.5.0",
-    "lxml>=6.0.0",
 ]
+
+[project.scripts]
+noams-splitter = "noams_splitter:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.pyre]
 version = "0.9.18"

@@ -1,72 +1,152 @@
-# ColorSplit Enhanced
+# ColorSplit3MF-Next
 
-Split 3MF files by paint color/material into separate components.
+Experimental open-source utility for splitting multi-color 3MF models into separate printable parts for FDM printing without AMS or other multi-material hardware.
 
-## Features
+This repository is a public fork of [mocsy/ColorSplit3mf](https://github.com/mocsy/ColorSplit3mf). Original author attribution, history, and license information are preserved. Current development focuses on research, testing, and practical "No AMS" workflows for Bambu Studio / MakerWorld style 3MF files.
 
-- Extract paint color information from 3MF files
-- Split multi-color models into individual components
-- Export as STL, OBJ, or PLY files
-- Command line and programmatic API
+## Screenshots
 
-### Visual Example
+Screenshots and workflow captures will be added as the MVP stabilizes.
 
-In this example we use a Makerworld remix of
-- https://github.com/DrLex0/print3D-hinged-locked-treasure-chest
-- https://makerworld.com/en/models/910440-hinged-locked-treasure-chest#profileId-1490628
-
-![Multi-color 3MF Model](content/before.png)
-
-The Makerworld version is a .3mf painted in Bambu Studio
-Which is what we want.
-
-![Separated Components A](content/after1.png)
-![Separated Components B](content/after2.png)
-
-*The tool automatically detects paint colors in 3MF files and creates separate files for each color group, making it easy to print different parts in different colors or materials.*
+Existing upstream sample images are available in `content/`.
 
 ## Installation
 
 ```bash
-uv pip install .
+git clone https://github.com/khusiatynski/ColorSplit3MF-Next.git
+cd ColorSplit3MF-Next
+python -m pip install -e ".[dev]"
 ```
 
-## Quick Start
+The MVP splitter itself uses Python standard library modules for parsing and STL export. The legacy experimental scripts may still require their original optional geometry dependencies.
+
+## Usage
+
+Show detected colors/materials:
 
 ```bash
-# Split a 3MF file by color
-python color_split_enhanced.py Hinged-Locked-Chest_MultiColor.3mf
-
-# Show color info only
-python color_split_enhanced.py input.3mf --info
-
-# Custom output
-python color_split_enhanced.py input.3mf -o my_output -f obj
+python noams_splitter.py model.3mf --info
 ```
 
-## Programmatic Usage
+Export separate STL files:
 
-```python
-from color_split_enhanced import EnhancedColorSplitter
-
-splitter = EnhancedColorSplitter("input.3mf")
-splitter.load_3mf()
-splitter.export_split_meshes("output", "stl")
+```bash
+python noams_splitter.py model.3mf --out output --format stl
 ```
 
-## Arguments
+Export STL files plus reports in `output.zip`:
 
-- `input_file`: 3MF file to process
-- `-o, --output`: Output directory (default: output)
-- `-f, --format`: Format: stl, obj, ply (default: stl)
-- `--info`: Show info only, don't export
+```bash
+python noams_splitter.py model.3mf --out output --format stl --zip
+```
 
-## Output
+Write diagnostic details:
 
-Files named: `{original_name}_{color_key}.{format}`
+```bash
+python noams_splitter.py model.3mf --out output --debug --verbose
+```
 
-Example: `Hinged-Locked-Chest_MultiColor_paint_color_1.stl`
+Typical output filenames are deterministic:
 
-## Dependencies
+```text
+model_ff0000.stl
+model_000000.stl
+model_ffffff.stl
+```
 
-- trimesh, numpy, matplotlib, open3d
+## Supported Formats
+
+Input:
+
+- `.3mf`
+- Bambu Studio / MakerWorld 3MF archives with triangle `paint_color` attributes
+- Standard 3MF `basematerials` and `colorgroup` colors for triangle `pid` / `p1` references
+
+Output:
+
+- `.stl` ASCII STL per detected color/material
+- Optional `.zip` containing STL files, `export_report.json`, and `color_summary.txt`
+
+## Known Limitations
+
+- This is an experimental MVP, not a slicer replacement.
+- STL output contains surface triangles only; it does not automatically generate watertight solids from painted surface regions.
+- Bambu `paint_color` to filament mapping uses the observed `paint_color = filament_index * 4` convention and may need more samples.
+- Complex modifier meshes, slicer-only settings, texture colors, and non-triangle geometry are not fully supported.
+- Only STL export is implemented in the stable MVP CLI.
+
+## Roadmap
+
+See [docs/roadmap.md](docs/roadmap.md).
+
+## Development
+
+```bash
+python -m pytest
+```
+
+Primary development branch:
+
+```text
+dev/noams-mvp
+```
+
+## Polski
+
+# ColorSplit3MF-Next
+
+Eksperymentalne narzedzie open-source do dzielenia wielokolorowych modeli 3MF na osobne czesci STL, ktore mozna drukowac na drukarce FDM bez AMS lub innego systemu multi-material.
+
+Repozytorium jest publicznym forkiem projektu [mocsy/ColorSplit3mf](https://github.com/mocsy/ColorSplit3mf). Zachowano autora oryginalnego projektu, historie repozytorium oraz informacje licencyjne.
+
+## Instalacja
+
+```bash
+git clone https://github.com/khusiatynski/ColorSplit3MF-Next.git
+cd ColorSplit3MF-Next
+python -m pip install -e ".[dev]"
+```
+
+## Przyklady Uzycia
+
+Wyswietlenie informacji o kolorach:
+
+```bash
+python noams_splitter.py model.3mf --info
+```
+
+Eksport osobnych plikow STL:
+
+```bash
+python noams_splitter.py model.3mf --out output --format stl
+```
+
+Eksport ZIP z raportami:
+
+```bash
+python noams_splitter.py model.3mf --out output --format stl --zip
+```
+
+## Obslugiwane Formaty
+
+Wejscie:
+
+- `.3mf`
+- pliki 3MF z Bambu Studio / MakerWorld z atrybutem `paint_color`
+- standardowe materialy 3MF `basematerials` i `colorgroup`
+
+Wyjscie:
+
+- osobne pliki `.stl`
+- opcjonalny `.zip` z plikami STL i raportami
+
+## Znane Ograniczenia
+
+- To MVP badawcze, nie zamiennik slicera.
+- Eksport STL dzieli powierzchnie wedlug kolorow, ale nie tworzy automatycznie zamknietych bryl.
+- Mapowanie `paint_color` z Bambu Studio wymaga dalszych testow na wiekszej liczbie modeli.
+- Na razie stabilny CLI eksportuje tylko STL.
+
+## Plan Rozwoju
+
+Zobacz [docs/roadmap.md](docs/roadmap.md).
