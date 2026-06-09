@@ -34,6 +34,8 @@ Or, after installation:
 noams-splitter-gui
 ```
 
+The GUI includes file selection, color detection, a sampled orthographic model preview, color-group selection by clicking the preview, color remapping, painted 3MF export, STL splitting, and ZIP export.
+
 Show detected colors/materials:
 
 ```bash
@@ -134,6 +136,8 @@ Albo po instalacji:
 ```bash
 noams-splitter-gui
 ```
+
+GUI zawiera wybor pliku, wykrywanie kolorow, probkowany podglad ortograficzny modelu, wybor grupy koloru kliknieciem w podglad, zmiane kolorow, zapis przemalowanego 3MF, dzielenie na STL i eksport ZIP.
 
 Wyswietlenie informacji o kolorach:
 

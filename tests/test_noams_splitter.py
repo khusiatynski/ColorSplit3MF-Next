@@ -8,6 +8,7 @@ import pytest
 
 from noams_splitter import NoAmsSplitter, SplitterError, export_result, main
 from noams_painter import recolor_3mf
+from noams_gui import remap_split_result_colors
 
 
 def write_3mf(path: Path, object_model: str, main_model: str | None = None, metadata: dict[str, str] | None = None) -> None:
@@ -259,3 +260,32 @@ def test_bambu_component_parts_use_part_extruders(tmp_path: Path) -> None:
     assert set(result.groups) == {"#009300", "#966141"}
     assert result.groups["#966141"].triangle_count == 1
     assert result.groups["#009300"].triangle_count == 1
+
+
+def test_preview_export_color_remap_merges_groups(tmp_path: Path) -> None:
+    object_model = simple_object_model(
+        '<triangle v1="0" v2="1" v3="2"/><triangle v1="0" v2="1" v3="3" paint_color="8"/>',
+        object_id="1",
+    )
+    main_model = """<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter"
+  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+  xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06">
+  <resources>
+    <object id="2" type="model">
+      <components>
+        <component objectid="1" p:path="/3D/Objects/object_1.model"/>
+      </components>
+    </object>
+  </resources>
+  <build><item objectid="2"/></build>
+</model>
+"""
+    input_file = tmp_path / "multi.3mf"
+    write_3mf(input_file, object_model, main_model, bambu_metadata())
+    result = NoAmsSplitter(input_file).split()
+
+    remapped = remap_split_result_colors(result, {"#FF0000": "#FFFFFF", "#000000": "#FFFFFF"})
+
+    assert set(remapped.groups) == {"#FFFFFF"}
+    assert remapped.groups["#FFFFFF"].triangle_count == 2
