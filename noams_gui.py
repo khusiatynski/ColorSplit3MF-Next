@@ -8,9 +8,10 @@ import queue
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 from typing import Callable
 
+from noams_painter import recolor_3mf
 from noams_splitter import (
     NoAmsSplitter,
     SplitResult,
@@ -36,6 +37,7 @@ class NoAmsSplitterApp(tk.Tk):
         self.output_dir = tk.StringVar(value=str(Path.cwd() / "output"))
         self.status = tk.StringVar(value="Ready")
         self.last_result: SplitResult | None = None
+        self.pending_colors: dict[str, str] = {}
         self.worker_queue: queue.Queue[tuple[str, object]] = queue.Queue()
 
         self._build_ui()
@@ -63,12 +65,14 @@ class NoAmsSplitterApp(tk.Tk):
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
-        columns = ("color", "material", "triangles")
+        columns = ("color", "new_color", "material", "triangles")
         self.color_table = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
         self.color_table.heading("color", text="Color / group")
+        self.color_table.heading("new_color", text="New color")
         self.color_table.heading("material", text="Material ID")
         self.color_table.heading("triangles", text="Triangles")
-        self.color_table.column("color", width=220, anchor="w")
+        self.color_table.column("color", width=180, anchor="w")
+        self.color_table.column("new_color", width=140, anchor="w")
         self.color_table.column("material", width=160, anchor="w")
         self.color_table.column("triangles", width=120, anchor="e")
         self.color_table.grid(row=0, column=0, sticky="nsew")
@@ -79,7 +83,7 @@ class NoAmsSplitterApp(tk.Tk):
 
         actions = ttk.Frame(root)
         actions.grid(row=3, column=0, columnspan=3, sticky="ew", pady=4)
-        for index in range(5):
+        for index in range(7):
             actions.columnconfigure(index, weight=1)
 
         self.info_button = ttk.Button(actions, text="Info", command=lambda: self._run_worker(self._load_info))
@@ -88,8 +92,12 @@ class NoAmsSplitterApp(tk.Tk):
         self.split_button.grid(row=0, column=1, sticky="ew", padx=6)
         self.zip_button = ttk.Button(actions, text="Split + ZIP", command=lambda: self._run_worker(lambda: self._export(True)))
         self.zip_button.grid(row=0, column=2, sticky="ew", padx=6)
-        ttk.Button(actions, text="Open output", command=self._open_output).grid(row=0, column=3, sticky="ew", padx=6)
-        ttk.Button(actions, text="Clear log", command=self._clear_log).grid(row=0, column=4, sticky="ew", padx=(6, 0))
+        self.color_button = ttk.Button(actions, text="Change color", command=self._choose_color)
+        self.color_button.grid(row=0, column=3, sticky="ew", padx=6)
+        self.save_3mf_button = ttk.Button(actions, text="Save painted 3MF", command=self._save_painted_dialog)
+        self.save_3mf_button.grid(row=0, column=4, sticky="ew", padx=6)
+        ttk.Button(actions, text="Open output", command=self._open_output).grid(row=0, column=5, sticky="ew", padx=6)
+        ttk.Button(actions, text="Clear log", command=self._clear_log).grid(row=0, column=6, sticky="ew", padx=(6, 0))
 
         log_frame = ttk.LabelFrame(root, text="Log", padding=8)
         log_frame.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=(8, 8))
@@ -132,6 +140,7 @@ class NoAmsSplitterApp(tk.Tk):
         input_path, _ = self._validate_paths()
         result = NoAmsSplitter(input_path).split()
         self.last_result = result
+        self.pending_colors.clear()
         return self._format_result(result)
 
     def _export(self, with_zip: bool) -> str:
@@ -156,6 +165,40 @@ class NoAmsSplitterApp(tk.Tk):
             f"Exported STL files: {len(exported_files)}\n"
             f"Output: {output_path}{zip_line}"
         )
+
+    def _save_painted_dialog(self) -> None:
+        try:
+            input_path, _ = self._validate_paths()
+            if not self.pending_colors:
+                raise SplitterError("No color changes selected.")
+
+            output_path = filedialog.asksaveasfilename(
+                title="Save painted 3MF",
+                defaultextension=".3mf",
+                initialfile=f"{input_path.stem}_painted.3mf",
+                filetypes=(("3MF files", "*.3mf"), ("All files", "*.*")),
+            )
+            if not output_path:
+                return
+
+            self._set_busy(True)
+            self.status.set("Saving painted 3MF...")
+            changed = recolor_3mf(input_path, output_path, self.pending_colors)
+            result = NoAmsSplitter(output_path).split()
+            self.input_file.set(output_path)
+            self.last_result = result
+            self.pending_colors.clear()
+            self._refresh_table()
+            self._append_log(
+                f"Saved painted 3MF: {output_path}\nChanged color definitions: {changed}\n\n{self._format_result(result)}"
+            )
+            self.status.set("Ready")
+        except Exception as exc:
+            self._append_log(f"Error: {exc}")
+            self.status.set("Error")
+            messagebox.showerror("ColorSplit3MF-Next", str(exc))
+        finally:
+            self._set_busy(False)
 
     def _format_result(self, result: SplitResult) -> str:
         summary = result_summary(result)
@@ -207,7 +250,29 @@ class NoAmsSplitterApp(tk.Tk):
         if self.last_result is None:
             return
         for group in self.last_result.groups.values():
-            self.color_table.insert("", "end", values=(group.label, group.material_id, group.triangle_count))
+            new_color = self.pending_colors.get(group.label, "")
+            self.color_table.insert(
+                "",
+                "end",
+                iid=group.label,
+                values=(group.label, new_color, group.material_id, group.triangle_count),
+            )
+
+    def _choose_color(self) -> None:
+        selection = self.color_table.selection()
+        if not selection:
+            messagebox.showinfo("ColorSplit3MF-Next", "Select a color group first.")
+            return
+        old_color = selection[0]
+        if not old_color.startswith("#"):
+            messagebox.showinfo("ColorSplit3MF-Next", "This MVP can recolor HEX color groups only.")
+            return
+        _, selected = colorchooser.askcolor(color=old_color, title="Choose new color")
+        if not selected:
+            return
+        self.pending_colors[old_color] = selected.upper()
+        self._refresh_table()
+        self._append_log(f"Pending color change: {old_color} -> {selected.upper()}")
 
     def _append_log(self, text: str) -> None:
         self.log_text.configure(state="normal")
@@ -227,6 +292,8 @@ class NoAmsSplitterApp(tk.Tk):
         self.info_button.configure(state=state)
         self.split_button.configure(state=state)
         self.zip_button.configure(state=state)
+        self.color_button.configure(state=state)
+        self.save_3mf_button.configure(state=state)
 
     def _open_output(self) -> None:
         output_path = Path(self.output_dir.get().strip())

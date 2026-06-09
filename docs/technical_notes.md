@@ -25,14 +25,20 @@ The MVP supports two color sources:
 - Bambu Studio / MakerWorld triangle attribute `paint_color`
 - standard 3MF material references using triangle `pid` and `p1`
 
-Bambu Studio stores filament colors in `Metadata/project_settings.config`. The observed convention in the sample model maps `paint_color` values to filament slots as `paint_color = filament_index * 4`. The parser uses this mapping when a filament palette is available and falls back to `paint_color_<id>` otherwise.
+Bambu Studio stores filament colors in `Metadata/project_settings.config`, usually in `filament_colour`. The observed convention in the sample model maps `paint_color` values to filament slots as `paint_color = filament_index * 4`. The parser uses this mapping when a filament palette is available and falls back to `paint_color_<id>` otherwise.
+
+Unpainted Bambu triangles are assigned from the object default extruder in `Metadata/model_settings.config` when that metadata is available.
 
 For standard 3MF resources, the parser indexes:
 
 - `basematerials` / `base displaycolor`
 - `colorgroup` / `color color`
 
-Unpainted Bambu triangles use the object default extruder from `Metadata/model_settings.config` when available.
+## How BambuLab Color Editing Works
+
+The Tkinter GUI can change HEX color groups and save a new painted `.3mf`. For Bambu Studio / MakerWorld archives this updates the filament palette in `Metadata/project_settings.config`. The triangle `paint_color` assignments are left unchanged, so geometry and face grouping are preserved while the color assigned to the filament slot changes.
+
+For standard 3MF files, the color editor updates matching `displaycolor` and `color` attributes in model XML files.
 
 ## How Meshes Are Grouped
 

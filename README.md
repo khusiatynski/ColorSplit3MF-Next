@@ -72,12 +72,14 @@ Input:
 
 - `.3mf`
 - Bambu Studio / MakerWorld 3MF archives with triangle `paint_color` attributes
+- BambuLab-style filament palettes stored in `Metadata/project_settings.config`
 - Standard 3MF `basematerials` and `colorgroup` colors for triangle `pid` / `p1` references
 
 Output:
 
 - `.stl` ASCII STL per detected color/material
 - Optional `.zip` containing STL files, `export_report.json`, and `color_summary.txt`
+- Painted `.3mf` files from the GUI color editor
 
 ## Known Limitations
 
@@ -157,12 +159,14 @@ Wejscie:
 
 - `.3mf`
 - pliki 3MF z Bambu Studio / MakerWorld z atrybutem `paint_color`
+- palety filamentow BambuLab zapisane w `Metadata/project_settings.config`
 - standardowe materialy 3MF `basematerials` i `colorgroup`
 
 Wyjscie:
 
 - osobne pliki `.stl`
 - opcjonalny `.zip` z plikami STL i raportami
+- przemalowane pliki `.3mf` z edytora GUI
 
 ## Znane Ograniczenia
 
