@@ -23,11 +23,14 @@ Build transforms are applied to vertices before export so generated STL files pr
 The MVP supports two color sources:
 
 - Bambu Studio / MakerWorld triangle attribute `paint_color`
+- Bambu Studio component/part extruder assignments in `Metadata/model_settings.config`
 - standard 3MF material references using triangle `pid` and `p1`
 
 Bambu Studio stores filament colors in `Metadata/project_settings.config`, usually in `filament_colour`. The observed convention in the sample model maps `paint_color` values to filament slots as `paint_color = filament_index * 4`. The parser uses this mapping when a filament palette is available and falls back to `paint_color_<id>` otherwise.
 
 Unpainted Bambu triangles are assigned from the object default extruder in `Metadata/model_settings.config` when that metadata is available.
+
+Some Bambu Studio projects do not store per-triangle `paint_color` data. Instead, the main build object is a component list and `Metadata/model_settings.config` assigns extruders to `part` entries by `source_volume_id`. The parser maps component order to those part entries and resolves the final color through `filament_colour` in `Metadata/project_settings.config`.
 
 For standard 3MF resources, the parser indexes:
 

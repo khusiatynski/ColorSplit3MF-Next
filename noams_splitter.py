@@ -143,6 +143,7 @@ class NoAmsSplitter:
         self.warnings: list[str] = []
         self.palette: list[str] = []
         self.default_extruders: dict[str, str] = {}
+        self.part_extruders: dict[str, dict[int, str]] = {}
         self.resources: dict[tuple[str, str], ET.Element] = {}
         self.resource_paths: dict[str, str] = {}
         self.material_colors: dict[tuple[str, str], str] = {}
@@ -228,7 +229,36 @@ class NoAmsSplitter:
             for metadata in object_node.findall("metadata"):
                 if metadata.attrib.get("key") == "extruder" and metadata.attrib.get("value"):
                     defaults[object_id] = metadata.attrib["value"]
+            inherited = defaults.get(object_id)
+            part_map: dict[int, str] = {}
+            for part in object_node.findall("part"):
+                volume_index = self._part_volume_index(part)
+                if volume_index is None:
+                    continue
+                extruder = self._part_extruder(part) or inherited
+                if extruder:
+                    part_map[volume_index] = extruder
+            if part_map:
+                self.part_extruders[object_id] = part_map
         return defaults
+
+    def _part_volume_index(self, part: ET.Element) -> int | None:
+        for metadata in part.findall("metadata"):
+            if metadata.attrib.get("key") == "source_volume_id" and metadata.attrib.get("value") is not None:
+                try:
+                    return int(metadata.attrib["value"])
+                except ValueError:
+                    return None
+        part_id = part.attrib.get("id")
+        if part_id and part_id.isdigit():
+            return int(part_id) - 1
+        return None
+
+    def _part_extruder(self, part: ET.Element) -> str | None:
+        for metadata in part.findall("metadata"):
+            if metadata.attrib.get("key") == "extruder" and metadata.attrib.get("value"):
+                return metadata.attrib["value"]
+        return None
 
     def _index_resources(self, roots: dict[str, ET.Element]) -> None:
         for path, root in roots.items():
@@ -285,13 +315,14 @@ class NoAmsSplitter:
         object_node: ET.Element,
         transform: Transform,
         default_object_id: str,
+        extruder_override: str | None = None,
     ) -> list[Triangle]:
         mesh_node = object_node.find("m:mesh", NS)
         if mesh_node is not None:
-            return self._collect_mesh_triangles(mesh_node, transform, default_object_id)
+            return self._collect_mesh_triangles(mesh_node, transform, default_object_id, extruder_override)
 
         triangles: list[Triangle] = []
-        for component in object_node.findall(".//m:component", NS):
+        for component_index, component in enumerate(object_node.findall(".//m:component", NS)):
             component_id = component.attrib.get("objectid")
             if not component_id:
                 continue
@@ -305,10 +336,26 @@ class NoAmsSplitter:
                 self.warnings.append(f"Component references missing object {component_id}.")
                 continue
             combined = compose_transform(parse_transform(component.attrib.get("transform")), transform)
-            triangles.extend(self._collect_object_triangles(component_path, component_id, resource, combined, default_object_id))
+            component_extruder = self._component_extruder(default_object_id, component_index, extruder_override)
+            triangles.extend(
+                self._collect_object_triangles(
+                    component_path,
+                    component_id,
+                    resource,
+                    combined,
+                    default_object_id,
+                    component_extruder,
+                )
+            )
         return triangles
 
-    def _collect_mesh_triangles(self, mesh_node: ET.Element, transform: Transform, default_object_id: str) -> list[Triangle]:
+    def _collect_mesh_triangles(
+        self,
+        mesh_node: ET.Element,
+        transform: Transform,
+        default_object_id: str,
+        extruder_override: str | None = None,
+    ) -> list[Triangle]:
         vertices: list[Point] = []
         for vertex in mesh_node.findall(".//m:vertices/m:vertex", NS):
             vertices.append(
@@ -321,7 +368,7 @@ class NoAmsSplitter:
 
         self.total_vertices += len(vertices)
         triangles: list[Triangle] = []
-        default_key, default_material = self._default_color_for_object(default_object_id)
+        default_key, default_material = self._default_color_for_object(default_object_id, extruder_override)
 
         for triangle in mesh_node.findall(".//m:triangles/m:triangle", NS):
             try:
@@ -336,8 +383,17 @@ class NoAmsSplitter:
             self.total_triangles += 1
         return triangles
 
-    def _default_color_for_object(self, object_id: str) -> tuple[str, str]:
-        extruder = self.default_extruders.get(object_id)
+    def _component_extruder(
+        self,
+        object_id: str,
+        component_index: int,
+        inherited_extruder: str | None = None,
+    ) -> str | None:
+        part_extruder = self.part_extruders.get(object_id, {}).get(component_index)
+        return part_extruder or inherited_extruder or self.default_extruders.get(object_id)
+
+    def _default_color_for_object(self, object_id: str, extruder_override: str | None = None) -> tuple[str, str]:
+        extruder = extruder_override or self.default_extruders.get(object_id)
         if extruder and extruder.isdigit():
             index = int(extruder) - 1
             if 0 <= index < len(self.palette):

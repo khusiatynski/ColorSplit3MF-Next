@@ -212,3 +212,50 @@ def test_recolor_standard_3mf_material(tmp_path: Path) -> None:
 
     assert changed == 1
     assert set(result.groups) == {"#0000FF"}
+
+
+def test_bambu_component_parts_use_part_extruders(tmp_path: Path) -> None:
+    main_model = """<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+  <resources>
+    <object id="1" type="model">
+      <mesh>
+        <vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices>
+        <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+      </mesh>
+    </object>
+    <object id="2" type="model">
+      <mesh>
+        <vertices><vertex x="0" y="0" z="1"/><vertex x="1" y="0" z="1"/><vertex x="0" y="1" z="1"/></vertices>
+        <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+      </mesh>
+    </object>
+    <object id="9" type="model">
+      <components>
+        <component objectid="1"/>
+        <component objectid="2"/>
+      </components>
+    </object>
+  </resources>
+  <build><item objectid="9"/></build>
+</model>
+"""
+    metadata = {
+        "Metadata/project_settings.config": json.dumps({"filament_colour": ["#009300", "#966141"]}),
+        "Metadata/model_settings.config": """<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <object id="9">
+    <metadata key="extruder" value="1"/>
+    <part id="1"><metadata key="source_volume_id" value="0"/><metadata key="extruder" value="2"/></part>
+    <part id="2"><metadata key="source_volume_id" value="1"/></part>
+  </object>
+</config>""",
+    }
+    input_file = tmp_path / "component_parts.3mf"
+    write_3mf(input_file, main_model, main_model, metadata)
+
+    result = NoAmsSplitter(input_file).split()
+
+    assert set(result.groups) == {"#009300", "#966141"}
+    assert result.groups["#966141"].triangle_count == 1
+    assert result.groups["#009300"].triangle_count == 1
