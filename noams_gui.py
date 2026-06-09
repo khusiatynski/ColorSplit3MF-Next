@@ -32,19 +32,32 @@ ScreenTriangle = tuple[tuple[float, float], tuple[float, float], tuple[float, fl
 def remap_split_result_colors(result: SplitResult, color_map: dict[str, str]) -> SplitResult:
     """Return a split result with color labels remapped for preview/export."""
 
-    if not color_map:
+    return apply_preview_edits(result, color_map, {})
+
+
+def apply_preview_edits(
+    result: SplitResult,
+    color_map: dict[str, str],
+    triangle_colors: dict[int, str],
+) -> SplitResult:
+    """Return a split result with group and per-triangle preview color edits applied."""
+
+    if not color_map and not triangle_colors:
         return result
     groups: dict[str, ColorGroup] = {}
+    triangle_index = 0
     for group in result.groups.values():
-        label = color_map.get(group.label, group.label)
-        if label not in groups:
-            groups[label] = ColorGroup(
-                key=label,
-                label=label,
-                material_id=group.material_id,
-                triangles=[],
-            )
-        groups[label].triangles.extend(group.triangles)
+        for triangle in group.triangles:
+            label = triangle_colors.get(triangle_index, color_map.get(group.label, group.label))
+            if label not in groups:
+                groups[label] = ColorGroup(
+                    key=label,
+                    label=label,
+                    material_id=group.material_id,
+                    triangles=[],
+                )
+            groups[label].triangles.append(triangle)
+            triangle_index += 1
     return SplitResult(
         input_file=result.input_file,
         unit=result.unit,
@@ -85,6 +98,9 @@ class NoAmsSplitterApp(tk.Tk):
         self.pick_status = tk.StringVar(value="Picked triangle: none")
         self.last_result: SplitResult | None = None
         self.pending_colors: dict[str, str] = {}
+        self.triangle_colors: dict[int, str] = {}
+        self.active_paint_color = tk.StringVar(value="#FF0000")
+        self.tool_mode = tk.StringVar(value="pick")
         self.preview_view = tk.StringVar(value="3D")
         self.camera_yaw = radians(-35.0)
         self.camera_pitch = radians(28.0)
@@ -122,28 +138,54 @@ class NoAmsSplitterApp(tk.Tk):
         preview_frame = ttk.LabelFrame(root, text="Preview", padding=8)
         preview_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(10, 8))
         preview_frame.columnconfigure(0, weight=1)
-        preview_frame.rowconfigure(1, weight=1)
+        preview_frame.rowconfigure(2, weight=1)
 
         preview_tools = ttk.Frame(preview_frame)
         preview_tools.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        preview_tools.columnconfigure(11, weight=1)
+        ttk.Label(preview_tools, text="Tool").grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(preview_tools, text="Pick", value="pick", variable=self.tool_mode).grid(
+            row=0, column=1, sticky="w", padx=(8, 0)
+        )
+        ttk.Radiobutton(preview_tools, text="Mesh", value="mesh", variable=self.tool_mode).grid(
+            row=0, column=2, sticky="w", padx=(8, 0)
+        )
+        ttk.Radiobutton(preview_tools, text="Triangle", value="triangle", variable=self.tool_mode).grid(
+            row=0, column=3, sticky="w", padx=(8, 0)
+        )
+        self.paint_swatch = tk.Label(preview_tools, textvariable=self.active_paint_color, width=10, relief="solid")
+        self.paint_swatch.grid(row=0, column=4, sticky="w", padx=(16, 4))
+        self._update_paint_swatch()
+        ttk.Button(preview_tools, text="Paint color", command=self._choose_active_paint_color).grid(
+            row=0, column=5, sticky="w", padx=(4, 0)
+        )
+        ttk.Button(preview_tools, text="Paint picked", command=self._paint_picked_triangle).grid(
+            row=0, column=6, sticky="w", padx=(8, 0)
+        )
+        ttk.Button(preview_tools, text="Clear edits", command=self._clear_preview_edits).grid(
+            row=0, column=7, sticky="w", padx=(8, 0)
+        )
+
+        view_tools = ttk.Frame(preview_frame)
+        view_tools.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         ttk.Radiobutton(
-            preview_tools,
+            view_tools,
             text="3D",
             value="3D",
             variable=self.preview_view,
             command=self._draw_preview,
         ).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(preview_tools, text="Top XY", value="XY", variable=self.preview_view, command=self._draw_preview).grid(
+        ttk.Radiobutton(view_tools, text="Top XY", value="XY", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=1, sticky="w", padx=(10, 0)
         )
-        ttk.Radiobutton(preview_tools, text="Front XZ", value="XZ", variable=self.preview_view, command=self._draw_preview).grid(
+        ttk.Radiobutton(view_tools, text="Front XZ", value="XZ", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=2, sticky="w", padx=(10, 0)
         )
-        ttk.Radiobutton(preview_tools, text="Side YZ", value="YZ", variable=self.preview_view, command=self._draw_preview).grid(
+        ttk.Radiobutton(view_tools, text="Side YZ", value="YZ", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=3, sticky="w", padx=(10, 0)
         )
-        ttk.Button(preview_tools, text="Reset camera", command=self._reset_camera).grid(row=0, column=4, sticky="e", padx=(16, 0))
-        ttk.Label(preview_tools, textvariable=self.pick_status).grid(row=0, column=5, sticky="e", padx=(16, 0))
+        ttk.Button(view_tools, text="Reset camera", command=self._reset_camera).grid(row=0, column=4, sticky="e", padx=(16, 0))
+        ttk.Label(view_tools, textvariable=self.pick_status).grid(row=0, column=5, sticky="e", padx=(16, 0))
 
         self.preview_canvas = tk.Canvas(
             preview_frame,
@@ -151,7 +193,7 @@ class NoAmsSplitterApp(tk.Tk):
             highlightthickness=1,
             highlightbackground="#c8c8c8",
         )
-        self.preview_canvas.grid(row=1, column=0, sticky="nsew")
+        self.preview_canvas.grid(row=2, column=0, sticky="nsew")
         self.preview_canvas.bind("<ButtonPress-1>", self._start_preview_drag)
         self.preview_canvas.bind("<B1-Motion>", self._drag_preview)
         self.preview_canvas.bind("<ButtonRelease-1>", self._end_preview_drag)
@@ -244,6 +286,7 @@ class NoAmsSplitterApp(tk.Tk):
         result = NoAmsSplitter(input_path).split()
         self.last_result = result
         self.pending_colors.clear()
+        self.triangle_colors.clear()
         self.picked_triangle = None
         self.pick_status.set("Picked triangle: none")
         return self._format_result(result)
@@ -273,11 +316,13 @@ class NoAmsSplitterApp(tk.Tk):
         )
 
     def _result_with_pending_colors(self, result: SplitResult) -> SplitResult:
-        return remap_split_result_colors(result, self.pending_colors)
+        return apply_preview_edits(result, self.pending_colors, self.triangle_colors)
 
     def _save_painted_dialog(self) -> None:
         try:
             input_path, _ = self._validate_paths()
+            if self.triangle_colors:
+                raise SplitterError("Saving per-triangle edits to 3MF is not implemented yet. Use Split/STL export for now.")
             if not self.pending_colors:
                 raise SplitterError("No color changes selected.")
 
@@ -297,6 +342,7 @@ class NoAmsSplitterApp(tk.Tk):
             self.input_file.set(output_path)
             self.last_result = result
             self.pending_colors.clear()
+            self.triangle_colors.clear()
             self.picked_triangle = None
             self.pick_status.set("Picked triangle: none")
             self._refresh_table()
@@ -388,6 +434,52 @@ class NoAmsSplitterApp(tk.Tk):
         self._draw_preview()
         self._append_log(f"Pending color change: {old_color} -> {selected.upper()}")
 
+    def _choose_active_paint_color(self) -> None:
+        _, selected = colorchooser.askcolor(color=self.active_paint_color.get(), title="Choose paint color")
+        if not selected:
+            return
+        self.active_paint_color.set(selected.upper())
+        self._update_paint_swatch()
+
+    def _update_paint_swatch(self) -> None:
+        color = self.active_paint_color.get()
+        text_color = "#FFFFFF" if self._relative_luma(color) < 0.45 else "#111111"
+        self.paint_swatch.configure(background=color, foreground=text_color)
+
+    def _relative_luma(self, color: str) -> float:
+        if not color.startswith("#") or len(color) != 7:
+            return 1.0
+        red = int(color[1:3], 16) / 255.0
+        green = int(color[3:5], 16) / 255.0
+        blue = int(color[5:7], 16) / 255.0
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+    def _paint_picked_triangle(self) -> None:
+        if self.picked_triangle is None:
+            messagebox.showinfo("ColorSplit3MF-Next", "Pick a triangle first.")
+            return
+        label, _triangle, triangle_index = self.picked_triangle
+        color = self.active_paint_color.get().upper()
+        if self.tool_mode.get() == "mesh":
+            self.pending_colors[label] = color
+            self._append_log(f"Painted color group {label} -> {color}")
+        else:
+            self.triangle_colors[triangle_index] = color
+            self._append_log(f"Painted triangle {triangle_index} -> {color}")
+        self.picked_triangle = None
+        self.pick_status.set("Picked triangle: none")
+        self._refresh_table()
+        self._draw_preview()
+
+    def _clear_preview_edits(self) -> None:
+        self.pending_colors.clear()
+        self.triangle_colors.clear()
+        self.picked_triangle = None
+        self.pick_status.set("Picked triangle: none")
+        self._refresh_table()
+        self._draw_preview()
+        self._append_log("Cleared preview color edits.")
+
     def _schedule_preview(self, _event: object | None = None) -> None:
         if self.preview_after_id is not None:
             self.after_cancel(self.preview_after_id)
@@ -447,8 +539,8 @@ class NoAmsSplitterApp(tk.Tk):
         self.preview_after_id = None
         self.preview_transform = None
         self.preview_canvas.delete("all")
-        result = self.last_result
-        if result is None:
+        source_result = self.last_result
+        if source_result is None:
             self.preview_canvas.create_text(
                 20,
                 20,
@@ -457,6 +549,7 @@ class NoAmsSplitterApp(tk.Tk):
                 fill="#555555",
             )
             return
+        result = self._result_with_pending_colors(source_result)
 
         width = max(self.preview_canvas.winfo_width(), 200)
         height = max(self.preview_canvas.winfo_height(), 160)
@@ -654,6 +747,9 @@ class NoAmsSplitterApp(tk.Tk):
             self.color_table.selection_set(label)
             self.color_table.focus(label)
             self.color_table.see(label)
+        if self.tool_mode.get() in {"mesh", "triangle"}:
+            self._paint_picked_triangle()
+            return
         self._draw_preview()
 
     def _pick_triangle_at(

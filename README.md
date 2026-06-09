@@ -34,7 +34,7 @@ Or, after installation:
 noams-splitter-gui
 ```
 
-The GUI includes file selection, color detection, a lightweight interactive 3D preview, real triangle picking under the cursor, color remapping, painted 3MF export, STL splitting, and ZIP export. In the preview, left-drag rotates, the mouse wheel zooms, right-drag pans, and a click picks the visible triangle.
+The GUI includes file selection, color detection, a lightweight interactive 3D preview, real triangle picking under the cursor, Pick/Mesh/Triangle paint modes, color remapping, painted 3MF export for group colors, STL splitting, and ZIP export. In the preview, left-drag rotates, the mouse wheel zooms, right-drag pans, and a click picks or paints the visible triangle depending on the active tool.
 
 Show detected colors/materials:
 
@@ -82,6 +82,7 @@ Output:
 - `.stl` ASCII STL per detected color/material
 - Optional `.zip` containing STL files, `export_report.json`, and `color_summary.txt`
 - Painted `.3mf` files from the GUI color editor
+- Preview-painted per-triangle STL exports from the GUI
 
 ## Known Limitations
 
@@ -90,6 +91,7 @@ Output:
 - Bambu `paint_color` to filament mapping uses the observed `paint_color = filament_index * 4` convention and may need more samples.
 - Complex modifier meshes, slicer-only settings, texture colors, and non-triangle geometry are not fully supported.
 - Only STL export is implemented in the stable MVP CLI.
+- GUI per-triangle painting currently affects preview/STL export only; writing those individual triangle edits back into 3MF is planned next.
 
 ## Roadmap
 
@@ -137,7 +139,7 @@ Albo po instalacji:
 noams-splitter-gui
 ```
 
-GUI zawiera wybor pliku, wykrywanie kolorow, lekki interaktywny podglad 3D, prawdziwy picking trojkata pod kursorem, zmiane kolorow, zapis przemalowanego 3MF, dzielenie na STL i eksport ZIP. W podgladzie lewy przycisk obraca model, kolko myszy przybliza, prawy przycisk przesuwa widok, a klikniecie wybiera widoczny trojkat.
+GUI zawiera wybor pliku, wykrywanie kolorow, lekki interaktywny podglad 3D, prawdziwy picking trojkata pod kursorem, tryby Pick/Mesh/Triangle, zmiane kolorow, zapis przemalowanego 3MF dla grup kolorow, dzielenie na STL i eksport ZIP. W podgladzie lewy przycisk obraca model, kolko myszy przybliza, prawy przycisk przesuwa widok, a klikniecie wybiera albo maluje widoczny trojkat zaleznie od aktywnego narzedzia.
 
 Wyswietlenie informacji o kolorach:
 
