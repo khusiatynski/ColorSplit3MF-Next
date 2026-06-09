@@ -34,7 +34,7 @@ Or, after installation:
 noams-splitter-gui
 ```
 
-The GUI includes file selection, color detection, a lightweight interactive 3D preview, color-group selection by clicking the preview, color remapping, painted 3MF export, STL splitting, and ZIP export. In the preview, left-drag rotates, the mouse wheel zooms, and right-drag pans.
+The GUI includes file selection, color detection, a lightweight interactive 3D preview, real triangle picking under the cursor, color remapping, painted 3MF export, STL splitting, and ZIP export. In the preview, left-drag rotates, the mouse wheel zooms, right-drag pans, and a click picks the visible triangle.
 
 Show detected colors/materials:
 
@@ -137,7 +137,7 @@ Albo po instalacji:
 noams-splitter-gui
 ```
 
-GUI zawiera wybor pliku, wykrywanie kolorow, lekki interaktywny podglad 3D, wybor grupy koloru kliknieciem w podglad, zmiane kolorow, zapis przemalowanego 3MF, dzielenie na STL i eksport ZIP. W podgladzie lewy przycisk obraca model, kolko myszy przybliza, a prawy przycisk przesuwa widok.
+GUI zawiera wybor pliku, wykrywanie kolorow, lekki interaktywny podglad 3D, prawdziwy picking trojkata pod kursorem, zmiane kolorow, zapis przemalowanego 3MF, dzielenie na STL i eksport ZIP. W podgladzie lewy przycisk obraca model, kolko myszy przybliza, prawy przycisk przesuwa widok, a klikniecie wybiera widoczny trojkat.
 
 Wyswietlenie informacji o kolorach:
 

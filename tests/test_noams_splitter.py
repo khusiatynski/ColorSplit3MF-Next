@@ -8,7 +8,7 @@ import pytest
 
 from noams_splitter import NoAmsSplitter, SplitterError, export_result, main
 from noams_painter import recolor_3mf
-from noams_gui import remap_split_result_colors
+from noams_gui import point_in_screen_triangle, remap_split_result_colors
 
 
 def write_3mf(path: Path, object_model: str, main_model: str | None = None, metadata: dict[str, str] | None = None) -> None:
@@ -289,3 +289,11 @@ def test_preview_export_color_remap_merges_groups(tmp_path: Path) -> None:
 
     assert set(remapped.groups) == {"#FFFFFF"}
     assert remapped.groups["#FFFFFF"].triangle_count == 2
+
+
+def test_point_in_screen_triangle() -> None:
+    triangle = ((0.0, 0.0), (10.0, 0.0), (0.0, 10.0))
+
+    assert point_in_screen_triangle(2.0, 2.0, triangle)
+    assert point_in_screen_triangle(0.0, 0.0, triangle)
+    assert not point_in_screen_triangle(8.0, 8.0, triangle)

@@ -26,6 +26,9 @@ from noams_splitter import (
 )
 
 
+ScreenTriangle = tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+
+
 def remap_split_result_colors(result: SplitResult, color_map: dict[str, str]) -> SplitResult:
     """Return a split result with color labels remapped for preview/export."""
 
@@ -53,6 +56,20 @@ def remap_split_result_colors(result: SplitResult, color_map: dict[str, str]) ->
     )
 
 
+def point_in_screen_triangle(x: float, y: float, triangle: ScreenTriangle) -> bool:
+    """Return True when a 2D point lies inside a screen-space triangle."""
+
+    (ax, ay), (bx, by), (cx, cy) = triangle
+    denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    if abs(denominator) < 1e-12:
+        return False
+    weight_a = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denominator
+    weight_b = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denominator
+    weight_c = 1.0 - weight_a - weight_b
+    epsilon = -1e-9
+    return weight_a >= epsilon and weight_b >= epsilon and weight_c >= epsilon
+
+
 class NoAmsSplitterApp(tk.Tk):
     """Small desktop UI for inspecting and exporting colored 3MF models."""
 
@@ -65,6 +82,7 @@ class NoAmsSplitterApp(tk.Tk):
         self.input_file = tk.StringVar()
         self.output_dir = tk.StringVar(value=str(Path.cwd() / "output"))
         self.status = tk.StringVar(value="Ready")
+        self.pick_status = tk.StringVar(value="Picked triangle: none")
         self.last_result: SplitResult | None = None
         self.pending_colors: dict[str, str] = {}
         self.preview_view = tk.StringVar(value="3D")
@@ -75,6 +93,8 @@ class NoAmsSplitterApp(tk.Tk):
         self.drag_start: tuple[int, int] | None = None
         self.drag_button: int | None = None
         self.drag_moved = False
+        self.preview_transform: tuple[int, int, float, float, float, float, float] | None = None
+        self.picked_triangle: tuple[str, tuple[tuple[float, float, float], ...], int] | None = None
         self.worker_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.preview_after_id: str | None = None
 
@@ -123,6 +143,7 @@ class NoAmsSplitterApp(tk.Tk):
             row=0, column=3, sticky="w", padx=(10, 0)
         )
         ttk.Button(preview_tools, text="Reset camera", command=self._reset_camera).grid(row=0, column=4, sticky="e", padx=(16, 0))
+        ttk.Label(preview_tools, textvariable=self.pick_status).grid(row=0, column=5, sticky="e", padx=(16, 0))
 
         self.preview_canvas = tk.Canvas(
             preview_frame,
@@ -223,6 +244,8 @@ class NoAmsSplitterApp(tk.Tk):
         result = NoAmsSplitter(input_path).split()
         self.last_result = result
         self.pending_colors.clear()
+        self.picked_triangle = None
+        self.pick_status.set("Picked triangle: none")
         return self._format_result(result)
 
     def _export(self, with_zip: bool) -> str:
@@ -274,6 +297,8 @@ class NoAmsSplitterApp(tk.Tk):
             self.input_file.set(output_path)
             self.last_result = result
             self.pending_colors.clear()
+            self.picked_triangle = None
+            self.pick_status.set("Picked triangle: none")
             self._refresh_table()
             self._draw_preview()
             self._append_log(
@@ -420,6 +445,7 @@ class NoAmsSplitterApp(tk.Tk):
 
     def _draw_preview(self) -> None:
         self.preview_after_id = None
+        self.preview_transform = None
         self.preview_canvas.delete("all")
         result = self.last_result
         if result is None:
@@ -459,6 +485,7 @@ class NoAmsSplitterApp(tk.Tk):
         center_x = (min_x + max_x) / 2.0
         center_y = (min_y + max_y) / 2.0
         pan_x, pan_y = self.camera_pan
+        self.preview_transform = (width, height, center_x, center_y, scale, pan_x, pan_y)
 
         self._draw_preview_background(width, height)
 
@@ -467,12 +494,7 @@ class NoAmsSplitterApp(tk.Tk):
         for label, triangle, _depth, shade in sorted(projected, key=lambda item: item[2]):
             coords: list[float] = []
             for x, y in triangle:
-                coords.extend(
-                    (
-                        width / 2.0 + (x - center_x) * scale * self.camera_zoom + pan_x,
-                        height / 2.0 - (y - center_y) * scale * self.camera_zoom + pan_y,
-                    )
-                )
+                coords.extend(self._projected_to_screen(x, y))
             fill = self._display_color(label, shade)
             outline = "#1f1f1f" if label == selected_label else self._display_color(label, max(shade - 0.18, 0.35))
             width_px = 2 if label == selected_label else 1
@@ -484,13 +506,22 @@ class NoAmsSplitterApp(tk.Tk):
                 tags=("preview_triangle", f"group:{label}"),
             )
 
+        if self.picked_triangle is not None:
+            label, triangle, _index = self.picked_triangle
+            coords = []
+            for point in triangle:
+                x, y = self._project_point(point)
+                coords.extend(self._projected_to_screen(x, y))
+            self.preview_canvas.create_polygon(coords, fill="", outline="#FF2D00", width=3)
+            self.preview_canvas.create_oval(coords[0] - 3, coords[1] - 3, coords[0] + 3, coords[1] + 3, fill="#FF2D00", outline="")
+
         self.preview_canvas.create_text(
             8,
             height - 8,
             anchor="sw",
             text=(
                 f"{self.preview_view.get()} engine, sampled triangles. "
-                "Left drag rotates, wheel zooms, right drag pans, click selects a color group."
+                "Left drag rotates, wheel zooms, right drag pans, click picks the real triangle under the cursor."
             ),
             fill="#333333",
         )
@@ -522,6 +553,15 @@ class NoAmsSplitterApp(tk.Tk):
         if view == "YZ":
             return (y, z)
         return (x, y)
+
+    def _projected_to_screen(self, x: float, y: float) -> tuple[float, float]:
+        if self.preview_transform is None:
+            return (x, y)
+        width, height, center_x, center_y, scale, pan_x, pan_y = self.preview_transform
+        return (
+            width / 2.0 + (x - center_x) * scale * self.camera_zoom + pan_x,
+            height / 2.0 - (y - center_y) * scale * self.camera_zoom + pan_y,
+        )
 
     def _project_depth(self, point: tuple[float, float, float]) -> float:
         x, y, z = point
@@ -602,18 +642,50 @@ class NoAmsSplitterApp(tk.Tk):
     def _select_preview_group(self, event: object) -> None:
         x = int(getattr(event, "x", 0))
         y = int(getattr(event, "y", 0))
-        item = self.preview_canvas.find_closest(x, y)
-        if not item:
+        picked = self._pick_triangle_at(x, y)
+        if picked is None:
+            self.pick_status.set("Picked triangle: none")
             return
-        tags = self.preview_canvas.gettags(item[0])
-        label = next((tag[len("group:") :] for tag in tags if tag.startswith("group:")), "")
-        if not label:
-            return
+        label, triangle, triangle_index, _depth = picked
+        self.picked_triangle = (label, triangle, triangle_index)
+        self.pick_status.set(f"Picked triangle: {triangle_index} ({label})")
+        self._append_log(f"Picked triangle {triangle_index} in group {label}")
         if self.color_table.exists(label):
             self.color_table.selection_set(label)
             self.color_table.focus(label)
             self.color_table.see(label)
-            self._draw_preview()
+        self._draw_preview()
+
+    def _pick_triangle_at(
+        self,
+        screen_x: float,
+        screen_y: float,
+    ) -> tuple[str, tuple[tuple[float, float, float], ...], int, float] | None:
+        result = self.last_result
+        if result is None or self.preview_transform is None:
+            return None
+
+        best: tuple[str, tuple[tuple[float, float, float], ...], int, float] | None = None
+        triangle_index = 0
+        for group in result.groups.values():
+            for triangle in group.triangles:
+                projected = [self._project_point(point) for point in triangle]
+                screen_triangle: ScreenTriangle = tuple(self._projected_to_screen(x, y) for x, y in projected)  # type: ignore[assignment]
+                min_x = min(point[0] for point in screen_triangle)
+                max_x = max(point[0] for point in screen_triangle)
+                min_y = min(point[1] for point in screen_triangle)
+                max_y = max(point[1] for point in screen_triangle)
+                if screen_x < min_x or screen_x > max_x or screen_y < min_y or screen_y > max_y:
+                    triangle_index += 1
+                    continue
+                if not point_in_screen_triangle(screen_x, screen_y, screen_triangle):
+                    triangle_index += 1
+                    continue
+                depth = sum(self._project_depth(point) for point in triangle) / 3.0
+                if best is None or depth > best[3]:
+                    best = (group.label, triangle, triangle_index, depth)
+                triangle_index += 1
+        return best
 
     def _append_log(self, text: str) -> None:
         self.log_text.configure(state="normal")
