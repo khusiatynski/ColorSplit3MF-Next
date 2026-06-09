@@ -4,6 +4,7 @@
 
 - Created public fork development direction as ColorSplit3MF-Next.
 - Added `noams_splitter.py` CLI for direct 3MF parsing and STL export.
+- Added `noams_gui.py` Tkinter GUI for selecting 3MF files, inspecting colors, exporting STL files, and creating ZIP packages.
 - Added support for `--info`, `--out`, `--format`, `--zip`, `--verbose`, and `--debug`.
 - Added JSON export reports, text color summaries, and diagnostic reports.
 - Added deterministic STL filenames based on source model and color/material key.

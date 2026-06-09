@@ -26,6 +26,7 @@ legacy = [
 
 [project.scripts]
 noams-splitter = "noams_splitter:main"
+noams-splitter-gui = "noams_gui:main"
 
 [tool.ruff]
 line-length = 120

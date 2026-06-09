@@ -22,6 +22,18 @@ The MVP splitter itself uses Python standard library modules for parsing and STL
 
 ## Usage
 
+Start the desktop GUI:
+
+```bash
+python noams_gui.py
+```
+
+Or, after installation:
+
+```bash
+noams-splitter-gui
+```
+
 Show detected colors/materials:
 
 ```bash
@@ -108,6 +120,18 @@ python -m pip install -e ".[dev]"
 ```
 
 ## Przyklady Uzycia
+
+Uruchomienie prostego GUI:
+
+```bash
+python noams_gui.py
+```
+
+Albo po instalacji:
+
+```bash
+noams-splitter-gui
+```
 
 Wyswietlenie informacji o kolorach:
 
