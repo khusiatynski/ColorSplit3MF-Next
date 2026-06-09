@@ -4,7 +4,7 @@
 
 - Validate Bambu `paint_color` mapping against more MakerWorld profiles.
 - Improve the Tkinter GUI with progress reporting and richer diagnostics.
-- Replace sampled 2D orthographic preview with an interactive 3D renderer for per-triangle painting.
+- Improve the lightweight 3D preview with denser rendering, clipping controls, and per-triangle picking.
 - Improve reports for object IDs, build item IDs, and source model paths.
 - Add more sample 3MF fixtures with known expected output.
 - Document workflows for printing separated parts without AMS.
@@ -12,6 +12,7 @@
 ## Planned Future Features
 
 - drag & drop
+- external accelerated 3D renderer option
 - per-triangle 3D painting
 - mesh repair
 - automatic solid generation

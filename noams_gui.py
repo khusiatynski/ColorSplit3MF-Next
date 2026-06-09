@@ -7,6 +7,7 @@ import os
 import queue
 import threading
 import tkinter as tk
+from math import cos, radians, sin
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
 from typing import Callable
@@ -66,7 +67,14 @@ class NoAmsSplitterApp(tk.Tk):
         self.status = tk.StringVar(value="Ready")
         self.last_result: SplitResult | None = None
         self.pending_colors: dict[str, str] = {}
-        self.preview_view = tk.StringVar(value="ISO")
+        self.preview_view = tk.StringVar(value="3D")
+        self.camera_yaw = radians(-35.0)
+        self.camera_pitch = radians(28.0)
+        self.camera_zoom = 1.0
+        self.camera_pan = (0.0, 0.0)
+        self.drag_start: tuple[int, int] | None = None
+        self.drag_button: int | None = None
+        self.drag_moved = False
         self.worker_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.preview_after_id: str | None = None
 
@@ -100,8 +108,8 @@ class NoAmsSplitterApp(tk.Tk):
         preview_tools.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Radiobutton(
             preview_tools,
-            text="Iso",
-            value="ISO",
+            text="3D",
+            value="3D",
             variable=self.preview_view,
             command=self._draw_preview,
         ).grid(row=0, column=0, sticky="w")
@@ -114,7 +122,7 @@ class NoAmsSplitterApp(tk.Tk):
         ttk.Radiobutton(preview_tools, text="Side YZ", value="YZ", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=3, sticky="w", padx=(10, 0)
         )
-        ttk.Button(preview_tools, text="Fit", command=self._draw_preview).grid(row=0, column=4, sticky="e", padx=(16, 0))
+        ttk.Button(preview_tools, text="Reset camera", command=self._reset_camera).grid(row=0, column=4, sticky="e", padx=(16, 0))
 
         self.preview_canvas = tk.Canvas(
             preview_frame,
@@ -123,7 +131,15 @@ class NoAmsSplitterApp(tk.Tk):
             highlightbackground="#c8c8c8",
         )
         self.preview_canvas.grid(row=1, column=0, sticky="nsew")
-        self.preview_canvas.bind("<Button-1>", self._select_preview_group)
+        self.preview_canvas.bind("<ButtonPress-1>", self._start_preview_drag)
+        self.preview_canvas.bind("<B1-Motion>", self._drag_preview)
+        self.preview_canvas.bind("<ButtonRelease-1>", self._end_preview_drag)
+        self.preview_canvas.bind("<ButtonPress-3>", self._start_preview_drag)
+        self.preview_canvas.bind("<B3-Motion>", self._drag_preview)
+        self.preview_canvas.bind("<ButtonRelease-3>", self._end_preview_drag)
+        self.preview_canvas.bind("<MouseWheel>", self._zoom_preview)
+        self.preview_canvas.bind("<Button-4>", self._zoom_preview)
+        self.preview_canvas.bind("<Button-5>", self._zoom_preview)
         self.preview_canvas.bind("<Configure>", self._schedule_preview)
 
         table_frame = ttk.LabelFrame(root, text="Detected colors", padding=8)
@@ -352,6 +368,56 @@ class NoAmsSplitterApp(tk.Tk):
             self.after_cancel(self.preview_after_id)
         self.preview_after_id = self.after(120, self._draw_preview)
 
+    def _reset_camera(self) -> None:
+        self.preview_view.set("3D")
+        self.camera_yaw = radians(-35.0)
+        self.camera_pitch = radians(28.0)
+        self.camera_zoom = 1.0
+        self.camera_pan = (0.0, 0.0)
+        self._draw_preview()
+
+    def _start_preview_drag(self, event: object) -> None:
+        self.drag_start = (int(getattr(event, "x", 0)), int(getattr(event, "y", 0)))
+        self.drag_button = int(getattr(event, "num", 1))
+        self.drag_moved = False
+
+    def _drag_preview(self, event: object) -> None:
+        if self.drag_start is None:
+            return
+        x = int(getattr(event, "x", 0))
+        y = int(getattr(event, "y", 0))
+        last_x, last_y = self.drag_start
+        dx = x - last_x
+        dy = y - last_y
+        if abs(dx) + abs(dy) > 2:
+            self.drag_moved = True
+        if self.drag_button == 3:
+            pan_x, pan_y = self.camera_pan
+            self.camera_pan = (pan_x + dx, pan_y + dy)
+        else:
+            self.preview_view.set("3D")
+            self.camera_yaw += dx * 0.012
+            self.camera_pitch = max(radians(-82.0), min(radians(82.0), self.camera_pitch + dy * 0.012))
+        self.drag_start = (x, y)
+        self._draw_preview()
+
+    def _end_preview_drag(self, event: object) -> None:
+        if self.drag_button == 1 and not self.drag_moved:
+            self._select_preview_group(event)
+        self.drag_start = None
+        self.drag_button = None
+        self.drag_moved = False
+
+    def _zoom_preview(self, event: object) -> None:
+        delta = int(getattr(event, "delta", 0))
+        button = int(getattr(event, "num", 0))
+        if delta > 0 or button == 4:
+            self.camera_zoom *= 1.12
+        elif delta < 0 or button == 5:
+            self.camera_zoom /= 1.12
+        self.camera_zoom = max(0.25, min(8.0, self.camera_zoom))
+        self._draw_preview()
+
     def _draw_preview(self) -> None:
         self.preview_after_id = None
         self.preview_canvas.delete("all")
@@ -390,6 +456,9 @@ class NoAmsSplitterApp(tk.Tk):
         span_y = max(max_y - min_y, 1e-9)
         margin = 18
         scale = min((width - margin * 2) / span_x, (height - margin * 2) / span_y)
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        pan_x, pan_y = self.camera_pan
 
         self._draw_preview_background(width, height)
 
@@ -398,7 +467,12 @@ class NoAmsSplitterApp(tk.Tk):
         for label, triangle, _depth, shade in sorted(projected, key=lambda item: item[2]):
             coords: list[float] = []
             for x, y in triangle:
-                coords.extend((margin + (x - min_x) * scale, height - margin - (y - min_y) * scale))
+                coords.extend(
+                    (
+                        width / 2.0 + (x - center_x) * scale * self.camera_zoom + pan_x,
+                        height / 2.0 - (y - center_y) * scale * self.camera_zoom + pan_y,
+                    )
+                )
             fill = self._display_color(label, shade)
             outline = "#1f1f1f" if label == selected_label else self._display_color(label, max(shade - 0.18, 0.35))
             width_px = 2 if label == selected_label else 1
@@ -414,7 +488,10 @@ class NoAmsSplitterApp(tk.Tk):
             8,
             height - 8,
             anchor="sw",
-            text=f"{self.preview_view.get()} preview, sampled triangles. Click a region to select its color group.",
+            text=(
+                f"{self.preview_view.get()} engine, sampled triangles. "
+                "Left drag rotates, wheel zooms, right drag pans, click selects a color group."
+            ),
             fill="#333333",
         )
 
@@ -437,8 +514,9 @@ class NoAmsSplitterApp(tk.Tk):
     def _project_point(self, point: tuple[float, float, float]) -> tuple[float, float]:
         x, y, z = point
         view = self.preview_view.get()
-        if view == "ISO":
-            return (x - y, (x + y) * 0.42 - z * 1.15)
+        if view == "3D":
+            tx, ty, _tz = self._camera_point(point)
+            return (tx, ty)
         if view == "XZ":
             return (x, z)
         if view == "YZ":
@@ -448,13 +526,28 @@ class NoAmsSplitterApp(tk.Tk):
     def _project_depth(self, point: tuple[float, float, float]) -> float:
         x, y, z = point
         view = self.preview_view.get()
-        if view == "ISO":
-            return x + y + z * 0.7
+        if view == "3D":
+            return self._camera_point(point)[2]
         if view == "XZ":
             return y
         if view == "YZ":
             return x
         return z
+
+    def _camera_point(self, point: tuple[float, float, float]) -> tuple[float, float, float]:
+        x, y, z = point
+        yaw_cos = cos(self.camera_yaw)
+        yaw_sin = sin(self.camera_yaw)
+        pitch_cos = cos(self.camera_pitch)
+        pitch_sin = sin(self.camera_pitch)
+
+        x1 = x * yaw_cos - y * yaw_sin
+        y1 = x * yaw_sin + y * yaw_cos
+        z1 = z
+
+        y2 = y1 * pitch_cos - z1 * pitch_sin
+        z2 = y1 * pitch_sin + z1 * pitch_cos
+        return (x1, y2, z2)
 
     def _triangle_shade(self, triangle: tuple[tuple[float, float, float], ...]) -> float:
         ax, ay, az = triangle[0]
@@ -468,10 +561,21 @@ class NoAmsSplitterApp(tk.Tk):
         length = (nx * nx + ny * ny + nz * nz) ** 0.5
         if length == 0:
             return 0.8
-        nx, ny, nz = nx / length, ny / length, nz / length
+        nx, ny, nz = self._camera_vector((nx / length, ny / length, nz / length))
         light = (-0.35, -0.45, 0.82)
         dot = abs(nx * light[0] + ny * light[1] + nz * light[2])
         return 0.56 + dot * 0.44
+
+    def _camera_vector(self, vector: tuple[float, float, float]) -> tuple[float, float, float]:
+        x, y, z = vector
+        yaw_cos = cos(self.camera_yaw)
+        yaw_sin = sin(self.camera_yaw)
+        pitch_cos = cos(self.camera_pitch)
+        pitch_sin = sin(self.camera_pitch)
+        x1 = x * yaw_cos - y * yaw_sin
+        y1 = x * yaw_sin + y * yaw_cos
+        z1 = z
+        return (x1, y1 * pitch_cos - z1 * pitch_sin, y1 * pitch_sin + z1 * pitch_cos)
 
     def _display_color(self, label: str, shade: float = 1.0) -> str:
         color = self.pending_colors.get(label, label)
