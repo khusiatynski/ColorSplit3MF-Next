@@ -66,7 +66,7 @@ class NoAmsSplitterApp(tk.Tk):
         self.status = tk.StringVar(value="Ready")
         self.last_result: SplitResult | None = None
         self.pending_colors: dict[str, str] = {}
-        self.preview_view = tk.StringVar(value="XY")
+        self.preview_view = tk.StringVar(value="ISO")
         self.worker_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.preview_after_id: str | None = None
 
@@ -98,16 +98,23 @@ class NoAmsSplitterApp(tk.Tk):
 
         preview_tools = ttk.Frame(preview_frame)
         preview_tools.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Radiobutton(
+            preview_tools,
+            text="Iso",
+            value="ISO",
+            variable=self.preview_view,
+            command=self._draw_preview,
+        ).grid(row=0, column=0, sticky="w")
         ttk.Radiobutton(preview_tools, text="Top XY", value="XY", variable=self.preview_view, command=self._draw_preview).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Radiobutton(preview_tools, text="Front XZ", value="XZ", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=1, sticky="w", padx=(10, 0)
         )
-        ttk.Radiobutton(preview_tools, text="Side YZ", value="YZ", variable=self.preview_view, command=self._draw_preview).grid(
+        ttk.Radiobutton(preview_tools, text="Front XZ", value="XZ", variable=self.preview_view, command=self._draw_preview).grid(
             row=0, column=2, sticky="w", padx=(10, 0)
         )
-        ttk.Button(preview_tools, text="Fit", command=self._draw_preview).grid(row=0, column=3, sticky="e", padx=(16, 0))
+        ttk.Radiobutton(preview_tools, text="Side YZ", value="YZ", variable=self.preview_view, command=self._draw_preview).grid(
+            row=0, column=3, sticky="w", padx=(10, 0)
+        )
+        ttk.Button(preview_tools, text="Fit", command=self._draw_preview).grid(row=0, column=4, sticky="e", padx=(16, 0))
 
         self.preview_canvas = tk.Canvas(
             preview_frame,
@@ -366,9 +373,17 @@ class NoAmsSplitterApp(tk.Tk):
             self.preview_canvas.create_text(20, 20, anchor="nw", text="No previewable triangles.", fill="#555555")
             return
 
-        projected = [(label, [self._project_point(point) for point in triangle]) for label, triangle in samples]
-        xs = [point[0] for _, triangle in projected for point in triangle]
-        ys = [point[1] for _, triangle in projected for point in triangle]
+        projected = [
+            (
+                label,
+                [self._project_point(point) for point in triangle],
+                sum(self._project_depth(point) for point in triangle) / 3.0,
+                self._triangle_shade(triangle),
+            )
+            for label, triangle in samples
+        ]
+        xs = [point[0] for _, triangle, _depth, _shade in projected for point in triangle]
+        ys = [point[1] for _, triangle, _depth, _shade in projected for point in triangle]
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
         span_x = max(max_x - min_x, 1e-9)
@@ -376,14 +391,16 @@ class NoAmsSplitterApp(tk.Tk):
         margin = 18
         scale = min((width - margin * 2) / span_x, (height - margin * 2) / span_y)
 
+        self._draw_preview_background(width, height)
+
         selected = self.color_table.selection()
         selected_label = selected[0] if selected else ""
-        for label, triangle in projected:
+        for label, triangle, _depth, shade in sorted(projected, key=lambda item: item[2]):
             coords: list[float] = []
             for x, y in triangle:
                 coords.extend((margin + (x - min_x) * scale, height - margin - (y - min_y) * scale))
-            fill = self._display_color(label)
-            outline = "#202020" if label == selected_label else fill
+            fill = self._display_color(label, shade)
+            outline = "#1f1f1f" if label == selected_label else self._display_color(label, max(shade - 0.18, 0.35))
             width_px = 2 if label == selected_label else 1
             self.preview_canvas.create_polygon(
                 coords,
@@ -405,8 +422,8 @@ class NoAmsSplitterApp(tk.Tk):
         groups = list(result.groups.values())
         if not groups:
             return []
-        max_total = 2200
-        max_per_group = max(80, max_total // len(groups))
+        max_total = 5200
+        max_per_group = max(220, max_total // len(groups))
         samples: list[tuple[str, tuple[tuple[float, float, float], ...]]] = []
         for group in groups:
             triangles = group.triangles
@@ -420,17 +437,63 @@ class NoAmsSplitterApp(tk.Tk):
     def _project_point(self, point: tuple[float, float, float]) -> tuple[float, float]:
         x, y, z = point
         view = self.preview_view.get()
+        if view == "ISO":
+            return (x - y, (x + y) * 0.42 - z * 1.15)
         if view == "XZ":
             return (x, z)
         if view == "YZ":
             return (y, z)
         return (x, y)
 
-    def _display_color(self, label: str) -> str:
+    def _project_depth(self, point: tuple[float, float, float]) -> float:
+        x, y, z = point
+        view = self.preview_view.get()
+        if view == "ISO":
+            return x + y + z * 0.7
+        if view == "XZ":
+            return y
+        if view == "YZ":
+            return x
+        return z
+
+    def _triangle_shade(self, triangle: tuple[tuple[float, float, float], ...]) -> float:
+        ax, ay, az = triangle[0]
+        bx, by, bz = triangle[1]
+        cx, cy, cz = triangle[2]
+        ux, uy, uz = bx - ax, by - ay, bz - az
+        vx, vy, vz = cx - ax, cy - ay, cz - az
+        nx = uy * vz - uz * vy
+        ny = uz * vx - ux * vz
+        nz = ux * vy - uy * vx
+        length = (nx * nx + ny * ny + nz * nz) ** 0.5
+        if length == 0:
+            return 0.8
+        nx, ny, nz = nx / length, ny / length, nz / length
+        light = (-0.35, -0.45, 0.82)
+        dot = abs(nx * light[0] + ny * light[1] + nz * light[2])
+        return 0.56 + dot * 0.44
+
+    def _display_color(self, label: str, shade: float = 1.0) -> str:
         color = self.pending_colors.get(label, label)
         if color.startswith("#") and len(color) == 7:
-            return color
+            red = int(color[1:3], 16)
+            green = int(color[3:5], 16)
+            blue = int(color[5:7], 16)
+            shade = max(0.25, min(shade, 1.15))
+            return (
+                f"#{min(int(red * shade), 255):02X}"
+                f"{min(int(green * shade), 255):02X}"
+                f"{min(int(blue * shade), 255):02X}"
+            )
         return "#9E9E9E"
+
+    def _draw_preview_background(self, width: int, height: int) -> None:
+        self.preview_canvas.create_rectangle(0, 0, width, height, fill="#f7f8f9", outline="")
+        step = 40
+        for x in range(0, width + step, step):
+            self.preview_canvas.create_line(x, 0, x, height, fill="#eceff1")
+        for y in range(0, height + step, step):
+            self.preview_canvas.create_line(0, y, width, y, fill="#eceff1")
 
     def _select_preview_group(self, event: object) -> None:
         x = int(getattr(event, "x", 0))
