@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import html
 import json
 import sys
@@ -17,6 +18,9 @@ from noams_splitter import NoAmsSplitter, SplitResult, SplitterError
 
 
 THREE_VERSION = "0.165.0"
+VIEWER_CACHE_DIR = Path(__file__).with_name(".viewer_cache")
+THREE_MODULE = Path(__file__).with_name("vendor") / "three" / "three.module.js"
+ORBIT_CONTROLS = Path(__file__).with_name("vendor") / "three" / "OrbitControls.js"
 
 
 def _float32_base64(values: list[float]) -> str:
@@ -50,9 +54,19 @@ def _viewer_payload(result: SplitResult) -> dict[str, Any]:
     }
 
 
-def generate_webgl_viewer(input_file: str | Path, output_file: str | Path | None = None) -> Path:
+def _cached_viewer_path(input_file: str | Path) -> Path:
+    source = Path(input_file)
+    stat = source.stat()
+    digest = hashlib.sha1(f"{source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")).hexdigest()[:16]
+    return VIEWER_CACHE_DIR / f"{source.stem}_{digest}.viewer.html"
+
+
+def generate_webgl_viewer(input_file: str | Path, output_file: str | Path | None = None, use_cache: bool = True) -> Path:
+    output_path = Path(output_file) if output_file else _cached_viewer_path(input_file)
+    if use_cache and output_path.exists():
+        return output_path
+
     result = NoAmsSplitter(input_file).split()
-    output_path = Path(output_file) if output_file else Path(input_file).with_suffix(".viewer.html")
     payload = _viewer_payload(result)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_html_document(payload), encoding="utf-8")
@@ -80,6 +94,8 @@ def open_webgl_app_window(input_file: str | Path, output_file: str | Path | None
 def _html_document(payload: dict[str, Any]) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
     title = html.escape(Path(payload["input"]).name)
+    three_module = THREE_MODULE.resolve().as_uri() if THREE_MODULE.exists() else f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/three.module.js"
+    orbit_controls = ORBIT_CONTROLS.resolve().as_uri() if ORBIT_CONTROLS.exists() else f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/examples/jsm/controls/OrbitControls.js"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -125,8 +141,8 @@ def _html_document(payload: dict[str, Any]) -> str:
   <div id="status">Loading geometry...</div>
   <script type="application/json" id="payload">{payload_json}</script>
   <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/three.module.js';
-    import {{ OrbitControls }} from 'https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/examples/jsm/controls/OrbitControls.js';
+    import * as THREE from '{three_module}';
+    import {{ OrbitControls }} from '{orbit_controls}';
 
     const payload = JSON.parse(document.getElementById('payload').textContent);
     const viewport = document.getElementById('viewport');

@@ -502,7 +502,7 @@ class NoAmsSplitterApp(tk.Tk):
 
         command = [sys.executable, str(Path(__file__).with_name("noams_web_viewer.py")), str(input_path), "--app"]
         subprocess.Popen(command, cwd=str(Path(__file__).parent))
-        self._append_log("Opened WebGL 3D engine window.")
+        self._append_log("Opening WebGL 3D engine window. First load builds a cached full-geometry viewer; later opens are faster.")
 
     def _schedule_preview(self, _event: object | None = None) -> None:
         if self.preview_after_id is not None:
