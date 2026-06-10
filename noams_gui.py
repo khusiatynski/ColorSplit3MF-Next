@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from math import cos, radians, sin
@@ -228,7 +230,7 @@ class NoAmsSplitterApp(tk.Tk):
 
         actions = ttk.Frame(root)
         actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=4)
-        for index in range(7):
+        for index in range(8):
             actions.columnconfigure(index, weight=1)
 
         self.info_button = ttk.Button(actions, text="Info", command=lambda: self._run_worker(self._load_info))
@@ -237,12 +239,13 @@ class NoAmsSplitterApp(tk.Tk):
         self.split_button.grid(row=0, column=1, sticky="ew", padx=6)
         self.zip_button = ttk.Button(actions, text="Split + ZIP", command=lambda: self._run_worker(lambda: self._export(True)))
         self.zip_button.grid(row=0, column=2, sticky="ew", padx=6)
+        ttk.Button(actions, text="3D Engine", command=self._open_webgl_engine).grid(row=0, column=3, sticky="ew", padx=6)
         self.color_button = ttk.Button(actions, text="Change color", command=self._choose_color)
-        self.color_button.grid(row=0, column=3, sticky="ew", padx=6)
+        self.color_button.grid(row=0, column=4, sticky="ew", padx=6)
         self.save_3mf_button = ttk.Button(actions, text="Save painted 3MF", command=self._save_painted_dialog)
-        self.save_3mf_button.grid(row=0, column=4, sticky="ew", padx=6)
-        ttk.Button(actions, text="Open output", command=self._open_output).grid(row=0, column=5, sticky="ew", padx=6)
-        ttk.Button(actions, text="Clear log", command=self._clear_log).grid(row=0, column=6, sticky="ew", padx=(6, 0))
+        self.save_3mf_button.grid(row=0, column=5, sticky="ew", padx=6)
+        ttk.Button(actions, text="Open output", command=self._open_output).grid(row=0, column=6, sticky="ew", padx=6)
+        ttk.Button(actions, text="Clear log", command=self._clear_log).grid(row=0, column=7, sticky="ew", padx=(6, 0))
 
         log_frame = ttk.LabelFrame(root, text="Log", padding=8)
         log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=(8, 8))
@@ -479,6 +482,24 @@ class NoAmsSplitterApp(tk.Tk):
         self._refresh_table()
         self._draw_preview()
         self._append_log("Cleared preview color edits.")
+
+    def _open_webgl_engine(self) -> None:
+        try:
+            input_path, _ = self._validate_paths()
+            import webview  # noqa: F401  # type: ignore[import-not-found]
+        except ImportError:
+            messagebox.showerror(
+                "ColorSplit3MF-Next",
+                "The application WebGL engine requires pywebview.\n\nInstall it with:\npython -m pip install -e .[viewer]",
+            )
+            return
+        except Exception as exc:
+            messagebox.showerror("ColorSplit3MF-Next", str(exc))
+            return
+
+        command = [sys.executable, str(Path(__file__).with_name("noams_web_viewer.py")), str(input_path), "--app"]
+        subprocess.Popen(command, cwd=str(Path(__file__).parent))
+        self._append_log("Opened WebGL 3D engine window.")
 
     def _schedule_preview(self, _event: object | None = None) -> None:
         if self.preview_after_id is not None:

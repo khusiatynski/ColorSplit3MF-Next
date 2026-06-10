@@ -13,7 +13,7 @@
 ## Planned Future Features
 
 - drag & drop
-- external accelerated 3D renderer option
+- tighter integration between pywebview WebGL picking and Python-side paint/export state
 - per-triangle 3D painting
 - mesh repair
 - automatic solid generation

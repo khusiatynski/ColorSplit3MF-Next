@@ -9,6 +9,7 @@ import pytest
 from noams_splitter import NoAmsSplitter, SplitterError, export_result, main
 from noams_painter import recolor_3mf
 from noams_gui import apply_preview_edits, point_in_screen_triangle, remap_split_result_colors
+from noams_web_viewer import generate_webgl_viewer
 
 
 def write_3mf(path: Path, object_model: str, main_model: str | None = None, metadata: dict[str, str] | None = None) -> None:
@@ -327,3 +328,18 @@ def test_point_in_screen_triangle() -> None:
     assert point_in_screen_triangle(2.0, 2.0, triangle)
     assert point_in_screen_triangle(0.0, 0.0, triangle)
     assert not point_in_screen_triangle(8.0, 8.0, triangle)
+
+
+def test_generate_webgl_viewer_html(tmp_path: Path) -> None:
+    model = simple_object_model('<triangle v1="0" v2="1" v3="2"/>')
+    input_file = tmp_path / "single.3mf"
+    output_file = tmp_path / "viewer.html"
+    write_3mf(input_file, model)
+
+    generated = generate_webgl_viewer(input_file, output_file)
+    html = generated.read_text(encoding="utf-8")
+
+    assert generated == output_file
+    assert "three.module.js" in html
+    assert "OrbitControls" in html
+    assert "Full geometry loaded in WebGL" in html

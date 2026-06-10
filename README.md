@@ -20,6 +20,12 @@ python -m pip install -e ".[dev]"
 
 The MVP splitter itself uses Python standard library modules for parsing and STL export. The legacy experimental scripts may still require their original optional geometry dependencies.
 
+For the embedded WebGL 3D engine window:
+
+```bash
+python -m pip install -e ".[viewer]"
+```
+
 ## Usage
 
 Start the desktop GUI:
@@ -34,7 +40,7 @@ Or, after installation:
 noams-splitter-gui
 ```
 
-The GUI includes file selection, color detection, a lightweight interactive 3D preview, real triangle picking under the cursor, Pick/Mesh/Triangle paint modes, color remapping, painted 3MF export for group colors, STL splitting, and ZIP export. In the preview, left-drag rotates, the mouse wheel zooms, right-drag pans, and a click picks or paints the visible triangle depending on the active tool.
+The GUI includes file selection, color detection, a lightweight built-in preview, an embedded WebGL 3D engine window, real triangle picking under the cursor, Pick/Mesh/Triangle paint modes, color remapping, painted 3MF export for group colors, STL splitting, and ZIP export. The `3D Engine` button opens the full-geometry WebGL viewer in an application window through pywebview/WebView2, not in a browser tab.
 
 Show detected colors/materials:
 
@@ -125,6 +131,12 @@ cd ColorSplit3MF-Next
 python -m pip install -e ".[dev]"
 ```
 
+Wbudowane okno silnika WebGL wymaga:
+
+```bash
+python -m pip install -e ".[viewer]"
+```
+
 ## Przyklady Uzycia
 
 Uruchomienie prostego GUI:
@@ -139,7 +151,7 @@ Albo po instalacji:
 noams-splitter-gui
 ```
 
-GUI zawiera wybor pliku, wykrywanie kolorow, lekki interaktywny podglad 3D, prawdziwy picking trojkata pod kursorem, tryby Pick/Mesh/Triangle, zmiane kolorow, zapis przemalowanego 3MF dla grup kolorow, dzielenie na STL i eksport ZIP. W podgladzie lewy przycisk obraca model, kolko myszy przybliza, prawy przycisk przesuwa widok, a klikniecie wybiera albo maluje widoczny trojkat zaleznie od aktywnego narzedzia.
+GUI zawiera wybor pliku, wykrywanie kolorow, lekki wbudowany podglad, okno silnika WebGL 3D, prawdziwy picking trojkata pod kursorem, tryby Pick/Mesh/Triangle, zmiane kolorow, zapis przemalowanego 3MF dla grup kolorow, dzielenie na STL i eksport ZIP. Przycisk `3D Engine` otwiera pelny WebGL viewer w oknie aplikacji przez pywebview/WebView2, a nie w karcie przegladarki.
 
 Wyswietlenie informacji o kolorach:
 

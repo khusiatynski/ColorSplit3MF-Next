@@ -9,6 +9,7 @@
 - Added lightweight interactive 3D preview controls for rotate, zoom, and pan.
 - Added screen-space triangle picking against the full parsed mesh in the GUI preview.
 - Added Pick/Mesh/Triangle GUI paint modes with per-triangle preview/STL color overrides.
+- Added optional pywebview/WebGL 3D engine window that renders full parsed geometry with Three.js.
 - Added `noams_painter.py` support for recoloring BambuLab-style 3MF filament palettes and standard 3MF material colors.
 - Added Bambu Studio part/extruder color detection for 3MF files without per-triangle `paint_color`.
 - Added support for `--info`, `--out`, `--format`, `--zip`, `--verbose`, and `--debug`.

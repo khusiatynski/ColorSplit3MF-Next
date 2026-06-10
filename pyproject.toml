@@ -23,10 +23,14 @@ legacy = [
     "trimesh>=3.9.0",
     "numpy>=1.19.0",
 ]
+viewer = [
+    "pywebview>=5.0",
+]
 
 [project.scripts]
 noams-splitter = "noams_splitter:main"
 noams-splitter-gui = "noams_gui:main"
+noams-web-viewer = "noams_web_viewer:main"
 
 [tool.ruff]
 line-length = 120
