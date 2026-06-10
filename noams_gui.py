@@ -167,6 +167,9 @@ class NoAmsSplitterApp(tk.Tk):
         ttk.Button(preview_tools, text="Clear edits", command=self._clear_preview_edits).grid(
             row=0, column=7, sticky="w", padx=(8, 0)
         )
+        ttk.Button(preview_tools, text="Open 3D Engine", command=self._open_webgl_engine).grid(
+            row=0, column=8, sticky="w", padx=(16, 0)
+        )
 
         view_tools = ttk.Frame(preview_frame)
         view_tools.grid(row=1, column=0, sticky="ew", pady=(0, 6))
